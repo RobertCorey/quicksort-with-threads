@@ -1,17 +1,21 @@
-/* This program uses 2 threads that each sort half of a global array. It then uses a 3rd thread to merge the halfs of an array in 
-* The sorting algorithem used is in place quicksort
-*/
+/*
+ * Robert Corey
+ * University of Rhode Island
+ * Assigns two threads to sort opposites halves of a list, then uses a third thread to merge the two halves
+ * Size of Array: 10 or user input
+ * Make: gcc threadSort.c -pthread -std=c99 -o ThreadSort
+ */
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #define SIZE_OF_ARRAY 10
-
 //Declare function headers
 int partition(int list[], int head, int tail, int pivot);
 void swap(int list[], int i, int j);
 void *quicksort(void *quicksortArg);
 void *listMerge(void *listArg);
+int isSorted(int list[], int size);
 
 //Structure to hold arguments for quicksort
 struct listData
@@ -30,14 +34,46 @@ struct mergeData
 
 //Main
 int main(){
+	printf(" _____ _                    _   ___          _   \n");
+		printf("|_   _| |_  _ _ ___ __ _ __| | / __| ___ _ _| |_ \n");
+		printf("  | | | ' \\| '_/ -_) _` / _` | \\__ \\/ _ \\ '_|  _|\n");
+		printf("  |_| |_||_|_| \\___\\__,_\\__,_| |___/\\___/_|  \\__|\n");
+		printf("\nRobert Corey\n\n");
 	//Ask user for input
+	int userChoice = -1;
+	int printData = 0;
+	while(userChoice < 0){
+		printf("Enter size of list to be sorted, or 0 for %i entries: ", SIZE_OF_ARRAY);
+		scanf("%d",&userChoice);
+		if (userChoice < 0){
+			printf("\nPlease enter a number greater than or equal to 0\n");
+		}
+	}
+		printf("Press 0 for quiet mode or 1 for loud mode: ");
+		scanf("%d",&printData);
+
 	//Initialze the array
-	int size = SIZE_OF_ARRAY;
+	int size = 0;
+	if (userChoice == 0)
+	{
+		size = SIZE_OF_ARRAY;
+	}else{
+		size = userChoice;
+	}
 	int *originalList = (int *) malloc(size * sizeof(int));
 	int *sortedList = (int *) malloc(size * sizeof(int));
 	//fill the array with random numbers
 	for(int i = 0; i < size; i++){
 		originalList[i] = rand()%100;
+	}
+	if (printData == 1)
+	{
+		printf("Unsorted List:\n");
+		for (int i = 0; i < size; ++i)
+		{
+			printf("%i ", originalList[i]);
+		}
+		printf("\n");
 	}
 	//Create listData structures pointing to the two different sublists
 	//points to the first half of the list
@@ -66,6 +102,17 @@ int main(){
 	//Wait for threads to finish
 	pthread_join(thread1,NULL);
 	pthread_join(thread2,NULL);
+	if (printData == 1){
+		printf("Sorted List 1:\n");
+		for (int i = 0; i < size; ++i)
+		{
+			if(i == size/2){
+				printf("\nSorted List 2:\n");
+			}
+			printf("%i ", originalList[i]);
+		}
+		printf("\n");
+	}
 	//Merge the list
 	struct mergeData argumentsForListMerge;
 	argumentsForListMerge.sourceList = originalList;
@@ -76,9 +123,19 @@ int main(){
 		exit(-1);
 	}
 	pthread_join(thread3,NULL);
-
+	if (printData == 1)
+	{
+		printf("Sorted List:\n");
+		for (int i = 0; i < size; ++i)
+		{
+			printf("%i ", sortedList[i]);
+		}
+		printf("\n");
+	}
+	isSorted(sortedList,size);	
 	free(originalList);
 	free(sortedList);
+
 	return 0;
 }
 //Partition 
@@ -159,4 +216,15 @@ void *listMerge(void *listArg){
 		head2++;
 		destinationListIndex++;
 	}
+}
+int isSorted(int list[],int size){
+	for (int i = 1; i < size; ++i)
+	{
+		if(i < (i-1)){
+			printf("ERROR! List is not sorted correctly\n");
+			return 0;
+		}
+	}
+	printf("List sorted succesfully! o(^_^o) (o^_^)o \n");
+	return 1;
 }
