@@ -225,6 +225,6 @@ int isSorted(int list[],int size){
 			return 0;
 		}
 	}
-	printf("List sorted succesfully! o(^_^o) (o^_^)o \n");
+	printf("List sorted succesfully!\n");
 	return 1;
 }
