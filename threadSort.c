@@ -2,18 +2,25 @@
  * Assigns two threads to sort opposites halves of a list, then uses a third thread to merge the two halves
  * University of Rhode Island, CSC 412, Operating Systems and Networks
  * Project 2
- * 2/15/2014
  * gcc threadSort.c -pthread -std=c99 -o ThreadSort
+ * March 16, 2014 
  * @author Robert Corey
- * @return 0 if succesful
+ * @return 0 if successful
  * @return -1 is fails
+ * Requires threadScript.h 
  */
+#define _GNU_SOURCE
+#define SIZE_OF_ARRAY 100000
+#define KGRN  "\x1B[32m"
+#define KRED  "\x1B[31m"
+#define KYEL  "\x1B[33m"
+#define KNRM  "\x1B[0m"
 #include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-#define SIZE_OF_ARRAY 10
+#include <sys/types.h> 
+#include <sys/syscall.h>
 //Declare function headers
 int partition(int list[], int head, int tail, int pivot);
 void swap(int list[], int i, int j);
@@ -21,7 +28,6 @@ void *quicksort(void *quicksortArg);
 void *quicksortHelper(void *quicksortArg);
 void *listMerge(void *listArg);
 int isSorted(int list[], int size);
-
 //Structure to hold arguments for quicksort
 struct listData
 {
@@ -36,7 +42,9 @@ struct mergeData
 	int *destinationList;
 	int listSize;
 };
-
+//Pointers for file I/O
+FILE *ptrToFile;
+FILE *systemCallFile;
 //Main
 int main(){
 	//Print Title
@@ -45,10 +53,10 @@ int main(){
 	printf("  | | | ' \\| '_/ -_) _` / _` | \\__ \\/ _ \\ '_|  _|\n");
 	printf("  |_| |_||_|_| \\___\\__,_\\__,_| |___/\\___/_|  \\__|\n");
 	printf("\nRobert Corey\n\n");
-
 	//Ask user for input
 	int userChoice = -1;
 	int printData = 0;
+	int userEnter = 0;
 	while(userChoice < 0){
 		printf("Enter size of list to be sorted, or 0 for %i entries: ", SIZE_OF_ARRAY);
 		scanf("%d",&userChoice);
@@ -56,10 +64,11 @@ int main(){
 			printf("\nPlease enter a number greater than or equal to 0\n");
 		}
 	}
+	printf("Enter 0 to enter the integers or 1 to generate them randomly: ");
+	scanf("%d",&userEnter);
 	printf("Press 0 for quiet mode or 1 for loud mode: ");
 	scanf("%d",&printData);
-
-	//Initialze the array
+	//Initialize the array
 	int size = 0;
 	if (userChoice == 0)
 	{
@@ -70,18 +79,38 @@ int main(){
 	//size is dynamic, so use malloc
 	int *originalList = (int *) malloc(size * sizeof(int));
 	int *sortedList = (int *) malloc(size * sizeof(int));
-	//fill the array with random numbers
-	for(int i = 0; i < size; i++){
-		originalList[i] = rand()%100;
+	//If the user wants random numbers fill the array with random numbers
+	//Else get user's digits
+	if (userEnter == 1)
+	{
+		for(int i = 0; i < size; i++){
+			originalList[i] = rand() % 1000;
+		}
 	}
+	else{
+		int i = 0;
+		int userDigit = 0;
+		while(i < size){
+			printf("Enter a digit: ");
+			scanf("%d",&userDigit);
+			originalList[i] = userDigit;
+			i++;
+		}
+	}
+	//Open file to output data into
+	ptrToFile = fopen("output.txt","w");
+	//if in loud mode print the unsorted list to the terminal and output file
 	if (printData == 1)
 	{
-		printf("Unsorted List:\n");
+		printf("%sUnsorted List:\n",KRED);
+		fprintf(ptrToFile, "Unsorted List:\n");
 		for (int i = 0; i < size; ++i)
 		{
-			printf("%i ", originalList[i]);
+			printf("%i ",originalList[i]);
+			fprintf(ptrToFile,"%i ",originalList[i]);
 		}
 		printf("\n");
+		fprintf(ptrToFile, "\n");
 	}
 	//Create listData structures pointing to the two different sublists
 	//Points to the first half of the list
@@ -94,18 +123,19 @@ int main(){
 	tailListData.list = originalList;
 	tailListData.head = (size / 2);
 	tailListData.tail = (size - 1);
-
 	//Initialize pthreads
 	pthread_attr_t attr;
 	pthread_attr_init(&attr);
+	//thread1 and thread2 sort the two lists
 	pthread_t thread1;
 	pthread_t thread2;
+	//thread3 merges the list
 	pthread_t thread3;
 	int error1, error2; 
 	//Create the sorting threads and check for errors
 	error1 = pthread_create(&thread1,&attr, quicksortHelper, (void *)&headListData);
 	error2 = pthread_create(&thread2,&attr, quicksortHelper, (void *)&tailListData);
-
+	//Exit with error if threads fail 
 	if(error1){
 		exit(-1);
 	}
@@ -115,40 +145,60 @@ int main(){
 	//Wait for threads to finish
 	pthread_join(thread1,NULL);
 	pthread_join(thread2,NULL);
+	//If in loud mode print the two sorted lists to terminal and outputfile
 	if (printData == 1){
 		printf("Sorted List 1:\n");
+		fprintf(ptrToFile, "Sorted List 1:\n");	
 		for (int i = 0; i < size; ++i)
 		{
 			if(i == size/2){
 				printf("\nSorted List 2:\n");
+				fprintf(ptrToFile, "\nSorted List2:\n");
 			}
-			printf("%i ", originalList[i]);
+			printf("%i ",originalList[i]);
+			fprintf(ptrToFile, "%i ",originalList[i]);
 		}
 		printf("\n");
+		fprintf(ptrToFile, "\n");
 	}
 	//Merge the list
+	//Create mergeData structure
 	struct mergeData argumentsForListMerge;
 	argumentsForListMerge.sourceList = originalList;
 	argumentsForListMerge.destinationList = sortedList;
 	argumentsForListMerge.listSize = size;
+	//Create new thread to do the merging
 	error1 = pthread_create(&thread3,&attr, listMerge, (void *)&argumentsForListMerge);
 	if(error1){
 		exit(-1);
 	}
 	//Wait for thread to finish
 	pthread_join(thread3,NULL);
+	//If in loud mode print the sorted list to the terminal and output file
 	if (printData == 1)
 	{
 		printf("Sorted List:\n");
+		fprintf(ptrToFile, "Sorted List\n");
 		for (int i = 0; i < size; ++i)
 		{
-			printf("%i ", sortedList[i]);
+			printf("%s%i ",KGRN,sortedList[i]);
+			fprintf(ptrToFile, "%i ",sortedList[i]);
 		}
 		printf("\n");
+		fprintf(ptrToFile, "\n");
 	}
-	//Check if array is sorted
+	//Check if the array is sorted
 	isSorted(sortedList,size);
-	system("ps");
+	//Merge the file with output from calling ps commands with the file containing the progress of the program
+	char chr;
+	systemCallFile = fopen("threads.txt","r");
+	while((chr = fgetc(systemCallFile)) != EOF){
+		fputc(chr,ptrToFile);
+	}
+	//close the files and delete the redundant threads.txt
+	fclose(ptrToFile);
+	fclose(systemCallFile);
+	system("rm threads.txt");	
 	//Delete arrays	
 	free(originalList);
 	free(sortedList);
@@ -166,15 +216,17 @@ int partition(int list[], int head, int tail, int pivot){
 	int pivotValue = list[pivot];
 	//Move the pivot to the end of list temporarily
 	swap(list,pivot,tail);
-	//
+	//set insert position to the head of the list 
 	int moveHere = head;
 	int i;
 	for (i = head; i < tail; ++i){
+		//if the current element is less than the pivot value move it to the leftmost open position
 		if (list[i] <= pivotValue){
 			swap(list,i,moveHere);
-			moveHere += 1;
+			moveHere += 1;//new leftmost position is 1 to the right  
 		}
 	}
+	//swap pivot with element that is furthest to the left but also belongs to the right of pivot 
 	swap(list,moveHere,tail);
 	return moveHere;
 }
@@ -189,23 +241,29 @@ void swap(int list[],int i, int j){
 	list[i] = list[j];
 	list[j] = temp;
 }
+/*
+* Prints the thread that called it's id then calls quicksort 
+*/
 void *quicksortHelper(void *quicksortArg){
-	printf("Sort Thread ID : %u\n", (unsigned int)pthread_self());
+	//Have the thread print it's ID and call ps to log the threads ID externally 
+	int tid = syscall(SYS_gettid);
+    printf("%sSorting Thread ID: %d\n",KYEL,tid);
+    fprintf(ptrToFile,"Sorting Thread ID: %d\n",tid);
+    system("ps -C ThreadSort -m -o args,tid >> threads.txt");
 	quicksort(quicksortArg);
 }
-/**
- *Quicksort sorting algorithem for use with threads. Sorts an array of integers from smallest to largest
+/*
+ *Quicksort sorting algorithm for use with threads. Sorts an array of integers from smallest to largest
  * @param quicksortArg a pointer to listData structure
  */ 
 void *quicksort(void *quicksortArg){
 	struct listData *quicksortData;
 	quicksortData = (struct listData *) quicksortArg;
-
 	int length = ((quicksortData->tail - quicksortData->head) + 1);
 	// if list size == 0 || list size == 1 it doesn't need to be sorted
 	if (quicksortData->head < quicksortData->tail){
 		int pivot = rand() % length; //get a range of possible pivots eg range for a list of size 3 is (0,1,2);
-		pivot += quicksortData->head; //since we're working with an array and not an actual list shift to the target elements
+		pivot += quicksortData->head; //since we're working with an array and not an actual list, shift to the target elements
 		//partition the list
 		int newPivotIndex = partition(quicksortData->list,quicksortData->head,quicksortData->tail,pivot);
 		// Sort everything to the left of the pivot 
@@ -227,10 +285,14 @@ void *quicksort(void *quicksortArg){
  * @param a pointer to a mergeData object 
  */ 
 void *listMerge(void *listArg){
-	printf("Merge Thread ID: %u\n", (unsigned int)pthread_self());
+	//Have the thread print it's ID and call ps to log the threads ID externally 
+    int threadId = syscall(SYS_gettid);
+    printf("%sMerge Thread ID: %d\n",KGRN,threadId);
+    fprintf(ptrToFile,"Merge Thread ID: %d\n",threadId);
+    system("ps -C ThreadSort -m -o args,tid >> threads.txt");
+
 	struct mergeData *localMergeData;
 	localMergeData = (struct mergeData *) listArg;
-
 	int length = localMergeData->listSize;
 	int head1 = 0;
 	int head2 = length/2;
@@ -250,7 +312,7 @@ void *listMerge(void *listArg){
 		}
 		destinationListIndex++;
 	}
-	//Once one list is exausted concatenate the elements of the non empty list into the new array
+	//Once one list is exhausted concatenate the elements of the non empty list into the new array
 	while (head1 <= tail1){
 		localMergeData->destinationList[destinationListIndex] = localMergeData->sourceList[head1];
 		head1++;
@@ -274,9 +336,11 @@ int isSorted(int list[],int size){
 	{
 		if(i < (i-1)){
 			printf("ERROR! List is not sorted correctly\n");
+			fprintf(ptrToFile,"ERROR! List is not sorted correctly\n");
 			return 0;
 		}
 	}
-	printf("List sorted succesfully!\n");
+	printf("%sList sorted correctly!\n",KNRM);
+	fprintf(ptrToFile,"List sorted correctly!\n");
 	return 1;
 }
